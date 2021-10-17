@@ -7,7 +7,16 @@
   </div>
   <div class="mt-40 text-center">
     <div class="mt-20 text-center text-secondary border-placeholder">
-      Add details about the payment here!
+      {{#if success}}
+      <!-- adding the confirmation page with total amount and Stripe identification (also description and receipt_email) -->
+      <h4>"{{product}}" is yours!</h4>
+      <br>
+      <p>Your payment of <b>$<span class="amount" data-amount="{{amount}}"></span></b> was accepted.</p>
+      {{#if email}}
+      <p>A receipt was sent to {{email}}</p>
+      {{/if}}
+      <p>Identification: {{intent_id}}</p>
+      {{/if}}
     </div>
   </div>
 </main>

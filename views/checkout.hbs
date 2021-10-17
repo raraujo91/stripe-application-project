@@ -20,13 +20,119 @@
             <input type="email" class="form-control" id="email" name="email" placeholder="you@email.com">
           </div>
           <div class="mt-20 text-center text-secondary border-placeholder">
-            Add Stripe Element here!
-          </div>
-          <div class="mt-20">
-            <button type="submit" class="btn btn-lg btn-block btn-primary">Pay $<span class="amount" data-amount="{{amount}}"></span></button>
-          </div>
+            <!-- adding Stripe DOM element -->
+            <div id="stripe-card-element" class="form-control">
+            </div>
+            <div class="mt-20">
+              <button type="submit" class="btn btn-lg btn-block btn-primary" disabled>Pay $<span class="amount"
+                  data-amount="{{amount}}"></span></button>
+            </div>
         </form>
       </div>
     </div>
   </div>
 </div>
+<script type="application/javascript">
+  var stripe;
+
+  // retrieve public key from back-end route
+  fetch('/stripe/config', { method: 'GET' })
+    .then(response => response.json())
+    .then(json => {
+      // initializing Stripe.js with locale as en to be compatible with project
+      stripe = Stripe(json.public, {
+        locale: 'en'
+      });
+
+      // initializing Stripe Elements
+      var elements = stripe.elements();
+
+      // defining font family fallback on style to match with the project (and also hiding postal code)
+      var cardStyle = {
+        hidePostalCode: true,
+        style: {
+          base: {
+            fontFamily: "Roboto, Helvetica Neue, Arial, sans-serif",
+            fontSize: "18px"
+          }
+        }
+      }
+
+      // creating and mouting Stripe card element on defined div
+      var card = elements.create("card", cardStyle);
+      card.mount("#stripe-card-element");
+
+      // getting email value from the checkout´s input
+      var email = document.querySelector("input[name=email]");
+
+      // adding the form listener to manage Stripe payment confirmation action
+      var form = document.querySelector("form[name=payment-form]");
+
+      // getting submit button to disable/enable it depending on some buyer's action 
+      var submitButton = document.querySelector('button[type=submit]');
+
+      // listening to the credit card input to be completely filled and enable it when it's the case 
+      card.on('change', function (event) {
+        if (event.complete) {
+          submitButton.disabled = false;
+        }
+      });
+
+      form.addEventListener("submit", function (event) {
+        // avoiding submit action to do a submit action (and refresh the page)
+        event.preventDefault();
+
+        // disables the button again to avoid double-buying action from buyer
+        submitButton.disabled = true;
+
+        var paymentData = {
+          title: "{{ title }}",
+          amount: "{{ amount }}"
+        }
+
+        // receiving the client_secret from backend
+
+        fetch("/stripe/create", {
+          method: "POST",
+          body: JSON.stringify(paymentData),
+          headers: {
+            "Content-Type": "application/json"
+          }
+        })
+          .then(response => response.json())
+          .then(json => {
+            if (json.error) {
+              // returns an error message in case unable to reach or generate client_secret
+              window.location.href = `${window.location.href.split("&")[0]}&error_message=Impossible to make payment due an internal error.`
+            } else {
+              // executing the payment confirmation via confirmCardPayment 
+              // informing payment_method as recommended on https://stripe.com/docs/js
+              // also informing the email collected as a receipt_email
+              stripe.confirmCardPayment(json.secret, {
+                payment_method: {
+                  card: card
+                },
+                receipt_email: email.value
+              })
+                .then(function (result) {
+                  // if an error is found with the payment it triggers the error alert with the error message
+                  if (result.error) {
+                    const { error } = result;
+                    window.location.href = `${window.location.href.split("&")[0]}&error_message=${error.message}`
+                  } else {
+                    // otherwise with the status as succeeded it redirects to the success page with the intent ID
+                    if (result.paymentIntent.status === "succeeded") {
+                      const { id } = result.paymentIntent;
+                      window.location.href = `/success?id=${id}`
+                    }
+                  }
+                });
+            }
+          })
+          .catch(error => {
+            console.log(error);
+          });
+      });
+    });
+
+</script>
